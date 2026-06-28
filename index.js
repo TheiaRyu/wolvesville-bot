@@ -4,7 +4,7 @@ const fs = require("fs");
 // =============================================
 // BURAYA KENDİ BİLGİLERİNİ GİR
 // =============================================
-const API_KEY = "BURAYA_API_KEY_YAZ";
+const API_KEY = "GmVLmm5SQPEExHkdgtMk4bklc7PgJFvuTLDZKu4haN1rqCwEUdgNsiOThxRT51gi";
 const CLAN_ID = "BURAYA_CLAN_ID_YAZ";
 const LIDER_USERNAME = "TheiaRyu";
 const BOT_ADI = "(BOT)TheiaRyu";
