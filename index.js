@@ -1,15 +1,12 @@
 const https = require("https");
 
-// =============================================
-// BURAYA KENDİ BİLGİLERİNİ GİR
-// =============================================
 const API_KEY = (process.env.API_KEY || "").trim();
 const CLAN_ID = (process.env.CLAN_ID || "").trim();
-console.log("API_KEY uzunluk:", API_KEY.length);
-console.log("CLAN_ID:", CLAN_ID);
 const LIDER_USERNAME = "TheiaRyu";
 const BOT_ADI = "(BOT)TheiaRyu";
-// =============================================
+
+console.log("API_KEY uzunluk:", API_KEY.length);
+console.log("CLAN_ID:", CLAN_ID);
 
 const BASE_URL = "https://api.wolvesville.com";
 const HEADERS = {
@@ -17,17 +14,13 @@ const HEADERS = {
   "Content-Type": "application/json",
 };
 
-// ---- VERİ BELLEKTE TUTULUYOR ----
-const gunlukXp = {};   // { playerId: { username, xpStart, xpNow, tarih } }
-const haftalikXp = {}; // { playerId: { username, xpStart, xpNow, haftaNo } }
-let gorevListesi = []; // [ username, ... ]
+const gunlukXp = {};
+const haftalikXp = {};
+let gorevListesi = [];
 let lastMessageDate = new Date().toISOString();
-let sonBagisZamani = null;
 let sonPazarMesaji = null;
 let sonPazarTop3 = null;
-let ilkYukleme = true;
 
-// ---- YARDIMCI ----
 function getHaftaNo() {
   const now = new Date();
   const start = new Date(now.getFullYear(), 0, 1);
@@ -37,7 +30,6 @@ function getBugunTarih() {
   return new Date().toDateString();
 }
 
-// ---- HTTP ----
 function apiRequest(method, path, body = null) {
   return new Promise((resolve, reject) => {
     const url = new URL(BASE_URL + path);
@@ -67,26 +59,29 @@ function sendMessage(msg) {
 }
 function getClanChat() { return apiRequest("GET", `/clans/${CLAN_ID}/chat`); }
 function getClanMembers() { return apiRequest("GET", `/clans/${CLAN_ID}/members`); }
-function getClanInfo() { return apiRequest("GET", `/clans/${CLAN_ID}`); }
 function getPlayerInfo(playerId) { return apiRequest("GET", `/players/${playerId}`); }
 
-// ---- XP GÜNCELLE ----
 async function xpGuncelle() {
   try {
     const members = await getClanMembers();
-    if (!Array.isArray(members)) return;
+    if (!Array.isArray(members)) { console.log("Üye listesi alınamadı"); return; }
 
     const bugun = getBugunTarih();
     const haftaNo = getHaftaNo();
+    let sayac = 0;
 
     for (const m of members) {
       if (m.status !== "ACCEPTED") continue;
       const player = await getPlayerInfo(m.playerId);
-      console.log("[PLAYER]", JSON.stringify(player).slice(0,200));
-if (!player || !player.username) continue;
-const xpSimdi = player.xp ?? player.totalXp ?? player.experience ?? 0;
+      if (!player || !player.username) continue;
 
-      // Günlük XP
+      const pid = m.playerId;
+      const username = player.username;
+      const xpSimdi = player.xp ?? player.totalXp ?? player.experience ?? 0;
+
+      if (sayac === 0) console.log(`[XP örnek] ${username}: xp=${player.xp}, totalXp=${player.totalXp}`);
+      sayac++;
+
       if (!gunlukXp[pid] || gunlukXp[pid].tarih !== bugun) {
         gunlukXp[pid] = { username, xpStart: xpSimdi, xpNow: xpSimdi, tarih: bugun };
       } else {
@@ -94,7 +89,6 @@ const xpSimdi = player.xp ?? player.totalXp ?? player.experience ?? 0;
         gunlukXp[pid].username = username;
       }
 
-      // Haftalık XP
       if (!haftalikXp[pid] || haftalikXp[pid].haftaNo !== haftaNo) {
         haftalikXp[pid] = { username, xpStart: xpSimdi, xpNow: xpSimdi, haftaNo };
       } else {
@@ -102,18 +96,12 @@ const xpSimdi = player.xp ?? player.totalXp ?? player.experience ?? 0;
         haftalikXp[pid].username = username;
       }
     }
-
-    if (ilkYukleme) {
-      console.log("XP verileri yüklendi! Üye sayısı:", Object.keys(gunlukXp).length);
-      ilkYukleme = false;
-      console.log("Üye listesi ham:", JSON.stringify(members.slice(0,2)));
-    }
+    console.log("XP güncellendi! Üye sayısı:", sayac);
   } catch (e) {
     console.error("XP güncelleme hatası:", e.message);
   }
 }
 
-// ---- KOMUTLAR ----
 async function handleBotYardim() {
   await sendMessage(
     `🤖 ${BOT_ADI} Komutları:\n` +
@@ -137,7 +125,6 @@ async function handleGunlukXp() {
     await sendMessage("📊 Bugün henüz XP verisi yok, birkaç dakika bekle.");
     return;
   }
-
   const madalyalar = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
   let msg = `📊 Bugünün XP Sıralaması:\n`;
   liste.forEach((u, i) => {
@@ -158,7 +145,6 @@ async function handleHaftalikXp() {
     await sendMessage("📊 Bu hafta henüz XP verisi yok.");
     return;
   }
-
   const madalyalar = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
   let msg = `📊 Haftalık XP Sıralaması:\n`;
   liste.forEach((u, i) => {
@@ -173,9 +159,7 @@ async function handleGorevBilgi() {
     return;
   }
   let msg = `📋 GÖREV LİSTESİ:\n`;
-  gorevListesi.forEach((nick, i) => {
-    msg += `${i + 1}. ${nick}\n`;
-  });
+  gorevListesi.forEach((nick, i) => { msg += `${i + 1}. ${nick}\n`; });
   await sendMessage(msg.trim());
 }
 
@@ -196,35 +180,29 @@ async function yeniUyeKarsilama(playerId) {
   } catch {}
 }
 
-// ---- HAFTALIK OTOMATİK MESAJLAR ----
 async function haftalikKontrol() {
   const simdi = new Date();
-  const gun = simdi.getDay(); // 0 = Pazar
+  const gun = simdi.getDay();
   const saat = simdi.getHours();
   const dakika = simdi.getMinutes();
   const bugun = getBugunTarih();
   const haftaNo = getHaftaNo();
 
-  // Pazar 11:00 → 3k XP kasamayanlar
   if (gun === 0 && saat === 11 && dakika === 0 && sonPazarMesaji !== bugun) {
     sonPazarMesaji = bugun;
     const dusuk = Object.values(haftalikXp)
       .filter(u => u.haftaNo === haftaNo)
       .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
       .filter(u => u.xp < 3000);
-
     if (dusuk.length === 0) {
       await sendMessage("✅ Harika! Herkes 3.000 XP kotasını doldurdu!");
     } else {
       let msg = `⚠️ Bu hafta 3.000 XP kasamayanlar:\n`;
-      dusuk.forEach((u, i) => {
-        msg += `${i + 1}. ${u.username} (${u.xp.toLocaleString()} XP)\n`;
-      });
+      dusuk.forEach((u, i) => { msg += `${i + 1}. ${u.username} (${u.xp.toLocaleString()} XP)\n`; });
       await sendMessage(msg.trim());
     }
   }
 
-  // Pazar 11:01 → Top 3
   if (gun === 0 && saat === 11 && dakika === 1 && sonPazarTop3 !== bugun) {
     sonPazarTop3 = bugun;
     const top3 = Object.values(haftalikXp)
@@ -232,44 +210,33 @@ async function haftalikKontrol() {
       .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
       .sort((a, b) => b.xp - a.xp)
       .slice(0, 3);
-
     if (top3.length === 0) return;
     const madalyalar = ["🥇", "🥈", "🥉"];
     let msg = `🏆 Haftanın En İyi 3 Kasıcısı:\n`;
-    top3.forEach((u, i) => {
-      msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`;
-    });
+    top3.forEach((u, i) => { msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
     await sendMessage(msg.trim());
   }
 }
 
-// ---- MESAJ OKUMA ----
 async function checkMessages() {
   try {
     const messages = await getClanChat();
     if (!Array.isArray(messages) || messages.length === 0) return;
-
-    const yeniMesajlar = messages.filter(
-      (m) => new Date(m.date) > new Date(lastMessageDate)
-    );
+    const yeniMesajlar = messages.filter(m => new Date(m.date) > new Date(lastMessageDate));
     if (yeniMesajlar.length === 0) return;
-
     lastMessageDate = yeniMesajlar[yeniMesajlar.length - 1].date;
 
     for (const mesaj of yeniMesajlar) {
       const text = (mesaj.msg || "").trim();
       const playerId = mesaj.playerId;
 
-      // Yeni üye
       if (mesaj.isSystem && text.toLowerCase().includes("joined")) {
         await yeniUyeKarsilama(playerId);
         continue;
       }
-
       if (!playerId) continue;
 
       const upper = text.toUpperCase();
-
       if (upper === "BOT YARDIM") {
         await handleBotYardim();
       } else if (upper === "XP KONTROL") {
@@ -279,12 +246,8 @@ async function checkMessages() {
       } else if (upper === "GÖREV BİLGİ" || upper === "GOREV BILGI") {
         await handleGorevBilgi();
       } else if (upper === "GÖREV BİLGİ YENİLE" || upper === "GOREV BILGI YENILE") {
-        let yazanUsername = null;
-        try {
-          const p = await getPlayerInfo(playerId);
-          yazanUsername = p?.username || null;
-        } catch {}
-        await handleGorevYenile(yazanUsername);
+        const p = await getPlayerInfo(playerId);
+        await handleGorevYenile(p?.username || null);
       }
     }
   } catch (err) {
@@ -292,20 +255,8 @@ async function checkMessages() {
   }
 }
 
-// ---- ANA DÖNGÜ ----
-async function anadongu() {
-  await checkMessages();
-  await haftalikKontrol();
-}
-
 console.log(`🐺 ${BOT_ADI} başlatıldı!`);
-
-// İlk başta hemen XP yükle
 xpGuncelle();
-
-// Her 3 dakikada XP güncelle
 setInterval(xpGuncelle, 3 * 60 * 1000);
-
-// Her 10 saniyede mesaj kontrol
-setInterval(anadongu, 10000);
-anadongu();
+setInterval(async () => { await checkMessages(); await haftalikKontrol(); }, 10000);
+checkMessages();
