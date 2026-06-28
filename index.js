@@ -82,11 +82,9 @@ async function xpGuncelle() {
     for (const m of members) {
       if (m.status !== "ACCEPTED") continue;
       const player = await getPlayerInfo(m.playerId);
-      if (!player || player.xp === undefined) continue;
-
-      const pid = m.playerId;
-      const username = player.username;
-      const xpSimdi = player.xp;
+      console.log("[PLAYER]", JSON.stringify(player).slice(0,200));
+if (!player || !player.username) continue;
+const xpSimdi = player.xp ?? player.totalXp ?? player.experience ?? 0;
 
       // Günlük XP
       if (!gunlukXp[pid] || gunlukXp[pid].tarih !== bugun) {
