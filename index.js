@@ -3,8 +3,10 @@ const https = require("https");
 // =============================================
 // BURAYA KENDİ BİLGİLERİNİ GİR
 // =============================================
-const API_KEY = process.env.API_KEY;
-const CLAN_ID = process.env.CLAN_ID;
+const API_KEY = (process.env.API_KEY || "").trim();
+const CLAN_ID = (process.env.CLAN_ID || "").trim();
+console.log("API_KEY uzunluk:", API_KEY.length);
+console.log("CLAN_ID:", CLAN_ID);
 const LIDER_USERNAME = "TheiaRyu";
 const BOT_ADI = "(BOT)TheiaRyu";
 // =============================================
