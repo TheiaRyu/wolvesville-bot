@@ -58,8 +58,9 @@ function sendMessage(msg) {
   return apiRequest("POST", `/clans/${CLAN_ID}/chat`, { message: msg });
 }
 function getClanChat() { return apiRequest("GET", `/clans/${CLAN_ID}/chat`); }
-function getClanMembers() { return apiRequest("GET", `/clans/${CLAN_ID}/members`); }
+function getClanMembers() { return apiRequest("GET", `/clans/${CLAN_ID}/members/detailed`); }
 function getPlayerInfo(playerId) { return apiRequest("GET", `/players/${playerId}`); }
+function getClanLog() { return apiRequest("GET", `/clans/${CLAN_ID}/log`); }
 
 async function xpGuncelle() {
   try {
@@ -70,16 +71,19 @@ async function xpGuncelle() {
     const haftaNo = getHaftaNo();
     let sayac = 0;
 
+    // İlk üyenin tüm alanlarını logla
+    if (members.length > 0) {
+      console.log("[ÜYE ÖRNEK]", JSON.stringify(members[0]).slice(0, 300));
+    }
+
     for (const m of members) {
       if (m.status !== "ACCEPTED") continue;
-      const player = await getPlayerInfo(m.playerId);
-      if (!player || !player.username) continue;
 
       const pid = m.playerId;
-      const username = player.username;
-      const xpSimdi = player.xp ?? player.totalXp ?? player.experience ?? 0;
+      const username = m.username;
+      // Detaylı endpoint'ten XP gelir
+      const xpSimdi = m.xp ?? m.totalXp ?? m.experience ?? m.seasonXp ?? 0;
 
-      if (sayac === 0) console.log(`[XP örnek] ${username}: xp=${player.xp}, totalXp=${player.totalXp}`);
       sayac++;
 
       if (!gunlukXp[pid] || gunlukXp[pid].tarih !== bugun) {
@@ -180,6 +184,32 @@ async function yeniUyeKarsilama(playerId) {
   } catch {}
 }
 
+// Bağış takibi
+let sonBagisZamani = null;
+async function bagisKontrol() {
+  try {
+    const log = await getClanLog();
+    if (!Array.isArray(log)) return;
+    for (const kayit of log) {
+      const zaman = kayit.date || kayit.timestamp;
+      if (!zaman) continue;
+      if (sonBagisZamani && new Date(zaman) <= new Date(sonBagisZamani)) continue;
+      const miktar = kayit.gold || kayit.amount || 0;
+      const tip = (kayit.type || kayit.action || "").toLowerCase();
+      if (miktar === 500 && (tip.includes("donat") || tip.includes("gold") || tip.includes("bagis") || tip === "")) {
+        const username = kayit.username || kayit.playerUsername || "Bilinmeyen";
+        if (!gorevListesi.includes(username)) {
+          gorevListesi.push(username);
+          await sendMessage(`💰 ${username} göreve 500 altın bağışladı! ✅`);
+        }
+        sonBagisZamani = zaman;
+      }
+    }
+  } catch (e) {
+    console.error("Bağış kontrol hatası:", e.message);
+  }
+}
+
 async function haftalikKontrol() {
   const simdi = new Date();
   const gun = simdi.getDay();
@@ -258,5 +288,10 @@ async function checkMessages() {
 console.log(`🐺 ${BOT_ADI} başlatıldı!`);
 xpGuncelle();
 setInterval(xpGuncelle, 3 * 60 * 1000);
-setInterval(async () => { await checkMessages(); await haftalikKontrol(); }, 10000);
+setInterval(async () => {
+  await checkMessages();
+  await haftalikKontrol();
+  await bagisKontrol();
+}, 10000);
 checkMessages();
+      
