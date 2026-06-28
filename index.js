@@ -108,6 +108,7 @@ async function xpGuncelle() {
     if (ilkYukleme) {
       console.log("XP verileri yüklendi! Üye sayısı:", Object.keys(gunlukXp).length);
       ilkYukleme = false;
+      console.log("Üye listesi ham:", JSON.stringify(members.slice(0,2)));
     }
   } catch (e) {
     console.error("XP güncelleme hatası:", e.message);
