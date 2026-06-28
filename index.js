@@ -129,7 +129,7 @@ async function handleGunlukXp() {
     await sendMessage("📊 Bugün henüz XP verisi yok, birkaç dakika bekle.");
     return;
   }
-  const madalyalar = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+  const madalyalar = ["1", "2", "3", "4", "5"];
   let msg = `📊 Bugünün XP Sıralaması:\n`;
   liste.forEach((u, i) => {
     msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`;
@@ -149,7 +149,7 @@ async function handleHaftalikXp() {
     await sendMessage("📊 Bu hafta henüz XP verisi yok.");
     return;
   }
-  const madalyalar = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+  const madalyalar = ["1", "2", "3", "4", "5"];
   let msg = `📊 Haftalık XP Sıralaması:\n`;
   liste.forEach((u, i) => {
     msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`;
@@ -265,7 +265,10 @@ async function checkMessages() {
         continue;
       }
       if (!playerId) continue;
-
+if (!mesaj.playerId) continue;
+// Bot kendi mesajlarını işleme
+const player = await getPlayerInfo(mesaj.playerId);
+if (player?.username === BOT_ADI || (player?.username || "").includes("BOT")) continue;
       const upper = text.toUpperCase();
       if (upper === "BOT YARDIM") {
         await handleBotYardim();
