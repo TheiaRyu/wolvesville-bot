@@ -93,6 +93,17 @@ async function xpGuncelle() {
 }
 
 // Bağış takibi - ledger'dan 500 altın DONATE işlemlerini kontrol et
+async function bagisBaslat() {
+  try {
+    const ledger = await getClanLedger();
+    if (!Array.isArray(ledger)) return;
+    for (const kayit of ledger) {
+      if (kayit.id) islenenBagislar.add(kayit.id);
+    }
+    console.log("Mevcut bağışlar işaretlendi:", islenenBagislar.size);
+  } catch (e) { console.error("Başlat hatası:", e.message); }
+}
+
 async function bagisKontrol() {
   try {
     const ledger = await getClanLedger();
@@ -185,13 +196,13 @@ async function handleGorevKaldir(yazanUsername, hedef) {
 async function handleGorevYenile(yazanUsername) {
   if (yazanUsername !== LIDER_USERNAME) { await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`); return; }
   gorevListesi = [];
-  islenenBagislar = new Set();
+
   await sendMessage(`✅ Görev listesi sıfırlandı!`);
 }
 
 async function yeniUyeKarsilama(username) {
   const isim = username || "yeni üye";
-  await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için BOT YARDIM yazabilirsiniz.`);
+  await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için siteye bakabilirsiniz.`);
 }
 
 async function haftalikKontrol() {
@@ -283,7 +294,8 @@ async function checkMessages() {
 console.log(`🐺 BOT(TheiaRyu) başlatıldı!`);
 botIdOgren();
 xpGuncelle();
-bagisKontrol(); // Başlangıçta mevcut bağışları yükle
+// Başlangıçta ledger ID'lerini işlenmiş olarak işaretle (mesaj atmadan)
+bagisBaslat();
 setInterval(xpGuncelle, 3 * 60 * 1000);
 setInterval(bagisKontrol, 60 * 1000); // Her dakika bağış kontrol
 setInterval(async () => {
@@ -291,3 +303,4 @@ setInterval(async () => {
   await haftalikKontrol();
 }, 10000);
 checkMessages();
+    
