@@ -63,7 +63,8 @@ function getClanChat() { return apiRequest("GET", `/clans/${CLAN_ID}/chat`); }
 function getClanMembers() { return apiRequest("GET", `/clans/${CLAN_ID}/members/detailed`); }
 function getPlayerInfo(playerId) { return apiRequest("GET", `/players/${playerId}`); }
 function getBotInfo() { return apiRequest("GET", `/players/me`); }
-function getClanLog() { return apiRequest("GET", `/clans/${CLAN_ID}/log`); }
+function getClanLog() { return apiRequest("GET", `/clans/${CLAN_ID}/logs`); }
+function getClanLedger() { return apiRequest("GET", `/clans/${CLAN_ID}/ledger`); }
 
 async function botIdOgren() {
   try {
@@ -106,6 +107,8 @@ async function xpGuncelle() {
 async function bagisKontrol() {
   try {
     const log = await getClanLog();
+    const ledger = await getClanLedger();
+    console.log("[LEDGER ÖRNEK]", JSON.stringify(ledger).slice(0, 300));
     if (!Array.isArray(log) && !log) return;
     
     // Log array veya object olabilir
@@ -161,7 +164,7 @@ async function handleGunlukXp() {
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
     .sort((a, b) => b.xp - a.xp).slice(0, 5);
   if (liste.length === 0) { await sendMessage("📊 Bugün henüz XP verisi yok, birkaç dakika bekle."); return; }
-  const m = ["1.","2.","3.","4.","5."];
+  const m = ["🥇","🥈","🥉","4️⃣","5️⃣"];
   let msg = `📊 Bugünün XP Sıralaması:\n`;
   liste.forEach((u, i) => { msg += `${m[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
@@ -174,7 +177,7 @@ async function handleHaftalikXp() {
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
     .sort((a, b) => b.xp - a.xp).slice(0, 5);
   if (liste.length === 0) { await sendMessage("📊 Bu hafta henüz XP verisi yok."); return; }
-  const m = ["1.","2.","3.","4.","5."];
+  const m = ["🥇","🥈","🥉","4️⃣","5️⃣"];
   let msg = `📊 Haftalık XP Sıralaması:\n`;
   liste.forEach((u, i) => { msg += `${m[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
@@ -212,7 +215,7 @@ async function handleGorevYenile(yazanUsername) {
 
 async function yeniUyeKarsilama(playerId, username) {
   const isim = username || "yeni üye";
-  await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için siteye bakabilirsiniz.`);
+  await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için BOT YARDIM yazabilirsiniz.`);
 }
 
 async function haftalikKontrol() {
@@ -314,4 +317,3 @@ setInterval(async () => {
   await haftalikKontrol();
 }, 10000);
 checkMessages();
-                         
