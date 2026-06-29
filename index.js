@@ -3,7 +3,7 @@ const https = require("https");
 const API_KEY = (process.env.API_KEY || "").trim();
 const CLAN_ID = (process.env.CLAN_ID || "").trim();
 const LIDER_USERNAME = "TheiaRyu";
-const BOT_ADI = "(BOT)TheiaRyu";
+const BOT_ADI = "BOT(TheiaRyu)";
 
 console.log("API_KEY uzunluk:", API_KEY.length);
 console.log("CLAN_ID:", CLAN_ID);
@@ -20,6 +20,8 @@ let gorevListesi = [];
 let lastMessageDate = new Date().toISOString();
 let sonPazarMesaji = null;
 let sonPazarTop3 = null;
+let sonBagisZamani = null;
+let botPlayerId = null;
 
 function getHaftaNo() {
   const now = new Date();
@@ -54,45 +56,46 @@ function apiRequest(method, path, body = null) {
 }
 
 function sendMessage(msg) {
-  console.log("[BOT]", msg);
+  console.log("[BOT]", msg.slice(0, 50));
   return apiRequest("POST", `/clans/${CLAN_ID}/chat`, { message: msg });
 }
 function getClanChat() { return apiRequest("GET", `/clans/${CLAN_ID}/chat`); }
 function getClanMembers() { return apiRequest("GET", `/clans/${CLAN_ID}/members/detailed`); }
 function getPlayerInfo(playerId) { return apiRequest("GET", `/players/${playerId}`); }
+function getBotInfo() { return apiRequest("GET", `/players/me`); }
 function getClanLog() { return apiRequest("GET", `/clans/${CLAN_ID}/log`); }
+
+async function botIdOgren() {
+  try {
+    const me = await getBotInfo();
+    if (me && me.id) {
+      botPlayerId = me.id;
+      console.log("Bot Player ID:", botPlayerId);
+    }
+  } catch (e) {
+    console.error("Bot ID alınamadı:", e.message);
+  }
+}
 
 async function xpGuncelle() {
   try {
     const members = await getClanMembers();
-    if (!Array.isArray(members)) { console.log("Üye listesi alınamadı"); return; }
-
+    if (!Array.isArray(members)) return;
     const bugun = getBugunTarih();
     const haftaNo = getHaftaNo();
     let sayac = 0;
-
-    // İlk üyenin tüm alanlarını logla
-    if (members.length > 0) {
-      console.log("[ÜYE ÖRNEK]", JSON.stringify(members[0]).slice(0, 300));
-    }
-
     for (const m of members) {
       if (m.status !== "ACCEPTED") continue;
-
       const pid = m.playerId;
       const username = m.username;
-      // Detaylı endpoint'ten XP gelir
       const xpSimdi = m.xp ?? m.totalXp ?? m.experience ?? m.seasonXp ?? 0;
-
       sayac++;
-
       if (!gunlukXp[pid] || gunlukXp[pid].tarih !== bugun) {
         gunlukXp[pid] = { username, xpStart: xpSimdi, xpNow: xpSimdi, tarih: bugun };
       } else {
         gunlukXp[pid].xpNow = xpSimdi;
         gunlukXp[pid].username = username;
       }
-
       if (!haftalikXp[pid] || haftalikXp[pid].haftaNo !== haftaNo) {
         haftalikXp[pid] = { username, xpStart: xpSimdi, xpNow: xpSimdi, haftaNo };
       } else {
@@ -108,11 +111,12 @@ async function xpGuncelle() {
 
 async function handleBotYardim() {
   await sendMessage(
-    `🤖 ${BOT_ADI} Komutları:\n` +
+    `🤖 BOT(TheiaRyu) Komutları:\n` +
     `XP KONTROL → Bugün top 5 XP\n` +
     `HAFTALIK XP KONTROL → Bu hafta top 5\n` +
     `GÖREV BİLGİ → 500 altın bağışlayanlar\n` +
-    `GÖREV BİLGİ YENİLE → Listeyi sıfırla (lider)\n` +
+    `GÖREV BİLGİ YENİLE → Tüm listeyi sıfırla (lider)\n` +
+    `GÖREV KALDIR @isim → Listeden çıkar (lider)\n` +
     `BOT YARDIM → Bu liste`
   );
 }
@@ -124,16 +128,13 @@ async function handleGunlukXp() {
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 5);
-
   if (liste.length === 0) {
     await sendMessage("📊 Bugün henüz XP verisi yok, birkaç dakika bekle.");
     return;
   }
-  const madalyalar = ["1", "2", "3", "4", "5"];
+  const madalyalar = ["1.", "2.", "3.", "4.", "5."];
   let msg = `📊 Bugünün XP Sıralaması:\n`;
-  liste.forEach((u, i) => {
-    msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`;
-  });
+  liste.forEach((u, i) => { msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
 }
 
@@ -144,16 +145,13 @@ async function handleHaftalikXp() {
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 5);
-
   if (liste.length === 0) {
     await sendMessage("📊 Bu hafta henüz XP verisi yok.");
     return;
   }
-  const madalyalar = ["1", "2", "3", "4", "5"];
+  const madalyalar = ["1.", "2.", "3.", "4.", "5."];
   let msg = `📊 Haftalık XP Sıralaması:\n`;
-  liste.forEach((u, i) => {
-    msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`;
-  });
+  liste.forEach((u, i) => { msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
 }
 
@@ -162,7 +160,7 @@ async function handleGorevBilgi() {
     await sendMessage("📋 GÖREV LİSTESİ\nHenüz 500 altın bağışlayan yok.");
     return;
   }
-  let msg = `📋 GÖREV LİSTESİ:\n`;
+  let msg = `📋 GÖREV LİSTESİ (500 altın bağışlayanlar):\n`;
   gorevListesi.forEach((nick, i) => { msg += `${i + 1}. ${nick}\n`; });
   await sendMessage(msg.trim());
 }
@@ -176,6 +174,24 @@ async function handleGorevYenile(yazanUsername) {
   await sendMessage(`✅ Görev listesi sıfırlandı!`);
 }
 
+async function handleGorevKaldir(yazanUsername, hedefUsername) {
+  if (yazanUsername !== LIDER_USERNAME) {
+    await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`);
+    return;
+  }
+  if (!hedefUsername) {
+    await sendMessage(`❌ Kullanım: GÖREV KALDIR @kullaniciadi`);
+    return;
+  }
+  const index = gorevListesi.findIndex(n => n.toLowerCase() === hedefUsername.toLowerCase());
+  if (index === -1) {
+    await sendMessage(`❌ ${hedefUsername} görev listesinde bulunamadı.`);
+    return;
+  }
+  gorevListesi.splice(index, 1);
+  await sendMessage(`✅ ${hedefUsername} görev listesinden kaldırıldı!`);
+}
+
 async function yeniUyeKarsilama(playerId) {
   try {
     const player = await getPlayerInfo(playerId);
@@ -184,8 +200,6 @@ async function yeniUyeKarsilama(playerId) {
   } catch {}
 }
 
-// Bağış takibi
-let sonBagisZamani = null;
 async function bagisKontrol() {
   try {
     const log = await getClanLog();
@@ -195,12 +209,11 @@ async function bagisKontrol() {
       if (!zaman) continue;
       if (sonBagisZamani && new Date(zaman) <= new Date(sonBagisZamani)) continue;
       const miktar = kayit.gold || kayit.amount || 0;
-      const tip = (kayit.type || kayit.action || "").toLowerCase();
-      if (miktar === 500 && (tip.includes("donat") || tip.includes("gold") || tip.includes("bagis") || tip === "")) {
+      if (miktar === 500) {
         const username = kayit.username || kayit.playerUsername || "Bilinmeyen";
         if (!gorevListesi.includes(username)) {
           gorevListesi.push(username);
-          await sendMessage(`💰 ${username} göreve 500 altın bağışladı! ✅`);
+          await sendMessage(`💰 ${username} göreve 500 altın bağışladı! Görev listesine eklendi ✅`);
         }
         sonBagisZamani = zaman;
       }
@@ -241,7 +254,7 @@ async function haftalikKontrol() {
       .sort((a, b) => b.xp - a.xp)
       .slice(0, 3);
     if (top3.length === 0) return;
-    const madalyalar = ["🥇", "🥈", "🥉"];
+    const madalyalar = ["1.", "2.", "3."];
     let msg = `🏆 Haftanın En İyi 3 Kasıcısı:\n`;
     top3.forEach((u, i) => { msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
     await sendMessage(msg.trim());
@@ -260,16 +273,16 @@ async function checkMessages() {
       const text = (mesaj.msg || "").trim();
       const playerId = mesaj.playerId;
 
+      if (!playerId) continue;
+      if (botPlayerId && playerId === botPlayerId) continue;
+
       if (mesaj.isSystem && text.toLowerCase().includes("joined")) {
         await yeniUyeKarsilama(playerId);
         continue;
       }
-      if (!playerId) continue;
-if (!mesaj.playerId) continue;
-// Bot kendi mesajlarını işleme
-const player = await getPlayerInfo(mesaj.playerId);
-if (player?.username === BOT_ADI || (player?.username || "").includes("BOT")) continue;
+
       const upper = text.toUpperCase();
+
       if (upper === "BOT YARDIM") {
         await handleBotYardim();
       } else if (upper === "XP KONTROL") {
@@ -281,6 +294,13 @@ if (player?.username === BOT_ADI || (player?.username || "").includes("BOT")) co
       } else if (upper === "GÖREV BİLGİ YENİLE" || upper === "GOREV BILGI YENILE") {
         const p = await getPlayerInfo(playerId);
         await handleGorevYenile(p?.username || null);
+      } else if (upper.startsWith("GÖREV KALDIR") || upper.startsWith("GOREV KALDIR")) {
+        const p = await getPlayerInfo(playerId);
+        const yazanUsername = p?.username || null;
+        // "@kullaniciadi" kısmını al
+        const parcalar = text.split("@");
+        const hedef = parcalar[1] ? parcalar[1].trim() : null;
+        await handleGorevKaldir(yazanUsername, hedef);
       }
     }
   } catch (err) {
@@ -288,7 +308,8 @@ if (player?.username === BOT_ADI || (player?.username || "").includes("BOT")) co
   }
 }
 
-console.log(`🐺 ${BOT_ADI} başlatıldı!`);
+console.log(`🐺 BOT(TheiaRyu) başlatıldı!`);
+botIdOgren();
 xpGuncelle();
 setInterval(xpGuncelle, 3 * 60 * 1000);
 setInterval(async () => {
@@ -297,4 +318,4 @@ setInterval(async () => {
   await bagisKontrol();
 }, 10000);
 checkMessages();
-      
+  
