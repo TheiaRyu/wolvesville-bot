@@ -20,7 +20,7 @@ let gorevListesi = [];
 let lastMessageDate = new Date().toISOString();
 let sonPazarMesaji = null;
 let sonPazarTop3 = null;
-let sonBagisZamani = null;
+let islenenBagislar = new Set(); // Daha önce işlenen bağış ID'leri
 let botPlayerId = null;
 
 function getHaftaNo() {
@@ -28,26 +28,16 @@ function getHaftaNo() {
   const start = new Date(now.getFullYear(), 0, 1);
   return Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
 }
-function getBugunTarih() {
-  return new Date().toDateString();
-}
+function getBugunTarih() { return new Date().toDateString(); }
 
 function apiRequest(method, path, body = null) {
   return new Promise((resolve, reject) => {
     const url = new URL(BASE_URL + path);
-    const options = {
-      hostname: url.hostname,
-      path: url.pathname + url.search,
-      method,
-      headers: HEADERS,
-    };
+    const options = { hostname: url.hostname, path: url.pathname + url.search, method, headers: HEADERS };
     const req = https.request(options, (res) => {
       let d = "";
       res.on("data", (c) => (d += c));
-      res.on("end", () => {
-        try { resolve(d ? JSON.parse(d) : {}); }
-        catch { resolve({}); }
-      });
+      res.on("end", () => { try { resolve(d ? JSON.parse(d) : {}); } catch { resolve({}); } });
     });
     req.on("error", (e) => { console.error("API Hata:", e.message); resolve({}); });
     if (body) req.write(JSON.stringify(body));
@@ -63,7 +53,6 @@ function getClanChat() { return apiRequest("GET", `/clans/${CLAN_ID}/chat`); }
 function getClanMembers() { return apiRequest("GET", `/clans/${CLAN_ID}/members/detailed`); }
 function getPlayerInfo(playerId) { return apiRequest("GET", `/players/${playerId}`); }
 function getBotInfo() { return apiRequest("GET", `/players/me`); }
-function getClanLog() { return apiRequest("GET", `/clans/${CLAN_ID}/logs`); }
 function getClanLedger() { return apiRequest("GET", `/clans/${CLAN_ID}/ledger`); }
 
 async function botIdOgren() {
@@ -103,42 +92,28 @@ async function xpGuncelle() {
   } catch (e) { console.error("XP hatası:", e.message); }
 }
 
-// Bağış takibi - log'dan 500 altın bağışlarını kontrol et
+// Bağış takibi - ledger'dan 500 altın DONATE işlemlerini kontrol et
 async function bagisKontrol() {
   try {
-    const log = await getClanLog();
     const ledger = await getClanLedger();
-    console.log("[LEDGER ÖRNEK]", JSON.stringify(ledger).slice(0, 300));
-    if (!Array.isArray(log) && !log) return;
-    
-    // Log array veya object olabilir
-    const kayitlar = Array.isArray(log) ? log : (log.items || log.logs || log.entries || []);
-    if (kayitlar.length === 0) return;
+    if (!Array.isArray(ledger)) return;
 
-    // İlk çalışmada son 24 saati kontrol et
-    const sinir = sonBagisZamani 
-      ? new Date(sonBagisZamani) 
-      : new Date(Date.now() - 24 * 60 * 60 * 1000);
+    for (const kayit of ledger) {
+      const id = kayit.id;
+      if (!id || islenenBagislar.has(id)) continue;
 
-    for (const kayit of kayitlar) {
-      const zaman = kayit.date || kayit.timestamp || kayit.createdAt;
-      if (!zaman) continue;
-      if (new Date(zaman) <= sinir) continue;
+      const tip = (kayit.type || "").toUpperCase();
+      const miktar = kayit.gold || 0;
+      const username = kayit.playerUsername || kayit.username || "Bilinmeyen";
 
-      // Log formatını anlamak için ilk kaydı logla
-      if (!sonBagisZamani) console.log("[LOG ÖRNEK]", JSON.stringify(kayit).slice(0, 300));
-
-      const miktar = kayit.gold || kayit.amount || kayit.coins || 0;
-      const tip = (kayit.type || kayit.action || kayit.eventType || "").toLowerCase();
-
-      if (miktar === 500 && !tip.includes("quest") && !tip.includes("gorev")) {
-        const username = kayit.username || kayit.playerUsername || kayit.player || "Bilinmeyen";
+      // Sadece 500 altın DONATE işlemleri
+      if (tip === "DONATE" && miktar === 500) {
+        islenenBagislar.add(id);
         if (!gorevListesi.includes(username)) {
           gorevListesi.push(username);
           await sendMessage(`💰 ${username} göreve 500 altın bağışladı! Görev listesine eklendi ✅`);
           console.log("Bağış eklendi:", username);
         }
-        sonBagisZamani = zaman;
       }
     }
   } catch (e) { console.error("Bağış hatası:", e.message); }
@@ -164,7 +139,7 @@ async function handleGunlukXp() {
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
     .sort((a, b) => b.xp - a.xp).slice(0, 5);
   if (liste.length === 0) { await sendMessage("📊 Bugün henüz XP verisi yok, birkaç dakika bekle."); return; }
-  const m = ["🥇","🥈","🥉","4️⃣","5️⃣"];
+  const m = ["1.","2.","3.","4.","5."];
   let msg = `📊 Bugünün XP Sıralaması:\n`;
   liste.forEach((u, i) => { msg += `${m[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
@@ -177,7 +152,7 @@ async function handleHaftalikXp() {
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
     .sort((a, b) => b.xp - a.xp).slice(0, 5);
   if (liste.length === 0) { await sendMessage("📊 Bu hafta henüz XP verisi yok."); return; }
-  const m = ["🥇","🥈","🥉","4️⃣","5️⃣"];
+  const m = ["1.","2.","3.","4.","5."];
   let msg = `📊 Haftalık XP Sıralaması:\n`;
   liste.forEach((u, i) => { msg += `${m[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
@@ -210,10 +185,11 @@ async function handleGorevKaldir(yazanUsername, hedef) {
 async function handleGorevYenile(yazanUsername) {
   if (yazanUsername !== LIDER_USERNAME) { await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`); return; }
   gorevListesi = [];
+  islenenBagislar = new Set();
   await sendMessage(`✅ Görev listesi sıfırlandı!`);
 }
 
-async function yeniUyeKarsilama(playerId, username) {
+async function yeniUyeKarsilama(username) {
   const isim = username || "yeni üye";
   await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için BOT YARDIM yazabilirsiniz.`);
 }
@@ -267,14 +243,12 @@ async function checkMessages() {
       const text = (mesaj.msg || "").trim();
       const playerId = mesaj.playerId;
 
-      // Sistem mesajı kontrolü - her sistem mesajını logla
+      // Sistem mesajı - katılma kontrolü
       if (mesaj.isSystem || mesaj.type === "SYSTEM" || !playerId) {
-        console.log("[SİSTEM]", JSON.stringify(mesaj).slice(0, 200));
-        // Katılma mesajı mı?
         const textLower = text.toLowerCase();
         if (textLower.includes("joined") || textLower.includes("katıldı") || textLower.includes("katildi")) {
           const username = mesaj.username || mesaj.playerUsername || null;
-          await yeniUyeKarsilama(playerId, username);
+          await yeniUyeKarsilama(username);
         }
         continue;
       }
@@ -309,7 +283,7 @@ async function checkMessages() {
 console.log(`🐺 BOT(TheiaRyu) başlatıldı!`);
 botIdOgren();
 xpGuncelle();
-bagisKontrol();
+bagisKontrol(); // Başlangıçta mevcut bağışları yükle
 setInterval(xpGuncelle, 3 * 60 * 1000);
 setInterval(bagisKontrol, 60 * 1000); // Her dakika bağış kontrol
 setInterval(async () => {
