@@ -56,7 +56,7 @@ function apiRequest(method, path, body = null) {
 }
 
 function sendMessage(msg) {
-  console.log("[BOT]", msg.slice(0, 50));
+  console.log("[BOT]", msg.slice(0, 60));
   return apiRequest("POST", `/clans/${CLAN_ID}/chat`, { message: msg });
 }
 function getClanChat() { return apiRequest("GET", `/clans/${CLAN_ID}/chat`); }
@@ -68,13 +68,8 @@ function getClanLog() { return apiRequest("GET", `/clans/${CLAN_ID}/log`); }
 async function botIdOgren() {
   try {
     const me = await getBotInfo();
-    if (me && me.id) {
-      botPlayerId = me.id;
-      console.log("Bot Player ID:", botPlayerId);
-    }
-  } catch (e) {
-    console.error("Bot ID alınamadı:", e.message);
-  }
+    if (me && me.id) { botPlayerId = me.id; console.log("Bot ID:", botPlayerId); }
+  } catch (e) {}
 }
 
 async function xpGuncelle() {
@@ -103,10 +98,47 @@ async function xpGuncelle() {
         haftalikXp[pid].username = username;
       }
     }
-    console.log("XP güncellendi! Üye sayısı:", sayac);
-  } catch (e) {
-    console.error("XP güncelleme hatası:", e.message);
-  }
+    console.log("XP güncellendi! Üye:", sayac);
+  } catch (e) { console.error("XP hatası:", e.message); }
+}
+
+// Bağış takibi - log'dan 500 altın bağışlarını kontrol et
+async function bagisKontrol() {
+  try {
+    const log = await getClanLog();
+    if (!Array.isArray(log) && !log) return;
+    
+    // Log array veya object olabilir
+    const kayitlar = Array.isArray(log) ? log : (log.items || log.logs || log.entries || []);
+    if (kayitlar.length === 0) return;
+
+    // İlk çalışmada son 24 saati kontrol et
+    const sinir = sonBagisZamani 
+      ? new Date(sonBagisZamani) 
+      : new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    for (const kayit of kayitlar) {
+      const zaman = kayit.date || kayit.timestamp || kayit.createdAt;
+      if (!zaman) continue;
+      if (new Date(zaman) <= sinir) continue;
+
+      // Log formatını anlamak için ilk kaydı logla
+      if (!sonBagisZamani) console.log("[LOG ÖRNEK]", JSON.stringify(kayit).slice(0, 300));
+
+      const miktar = kayit.gold || kayit.amount || kayit.coins || 0;
+      const tip = (kayit.type || kayit.action || kayit.eventType || "").toLowerCase();
+
+      if (miktar === 500 && !tip.includes("quest") && !tip.includes("gorev")) {
+        const username = kayit.username || kayit.playerUsername || kayit.player || "Bilinmeyen";
+        if (!gorevListesi.includes(username)) {
+          gorevListesi.push(username);
+          await sendMessage(`💰 ${username} göreve 500 altın bağışladı! Görev listesine eklendi ✅`);
+          console.log("Bağış eklendi:", username);
+        }
+        sonBagisZamani = zaman;
+      }
+    }
+  } catch (e) { console.error("Bağış hatası:", e.message); }
 }
 
 async function handleBotYardim() {
@@ -115,9 +147,9 @@ async function handleBotYardim() {
     `XP KONTROL → Bugün top 5 XP\n` +
     `HAFTALIK XP KONTROL → Bu hafta top 5\n` +
     `GÖREV BİLGİ → 500 altın bağışlayanlar\n` +
-    `GÖREV BİLGİ YENİLE → Tüm listeyi sıfırla (lider)\n` +
     `GÖREV EKLE @isim → Listeye ekle (lider)\n` +
     `GÖREV KALDIR @isim → Listeden çıkar (lider)\n` +
+    `GÖREV BİLGİ YENİLE → Tümünü sıfırla (lider)\n` +
     `BOT YARDIM → Bu liste`
   );
 }
@@ -127,15 +159,11 @@ async function handleGunlukXp() {
   const liste = Object.values(gunlukXp)
     .filter(u => u.tarih === bugun)
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
-    .sort((a, b) => b.xp - a.xp)
-    .slice(0, 5);
-  if (liste.length === 0) {
-    await sendMessage("📊 Bugün henüz XP verisi yok, birkaç dakika bekle.");
-    return;
-  }
-  const madalyalar = ["1.", "2.", "3.", "4.", "5."];
+    .sort((a, b) => b.xp - a.xp).slice(0, 5);
+  if (liste.length === 0) { await sendMessage("📊 Bugün henüz XP verisi yok, birkaç dakika bekle."); return; }
+  const m = ["1.","2.","3.","4.","5."];
   let msg = `📊 Bugünün XP Sıralaması:\n`;
-  liste.forEach((u, i) => { msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
+  liste.forEach((u, i) => { msg += `${m[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
 }
 
@@ -144,103 +172,47 @@ async function handleHaftalikXp() {
   const liste = Object.values(haftalikXp)
     .filter(u => u.haftaNo === haftaNo)
     .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
-    .sort((a, b) => b.xp - a.xp)
-    .slice(0, 5);
-  if (liste.length === 0) {
-    await sendMessage("📊 Bu hafta henüz XP verisi yok.");
-    return;
-  }
-  const madalyalar = ["1.", "2.", "3.", "4.", "5."];
+    .sort((a, b) => b.xp - a.xp).slice(0, 5);
+  if (liste.length === 0) { await sendMessage("📊 Bu hafta henüz XP verisi yok."); return; }
+  const m = ["1.","2.","3.","4.","5."];
   let msg = `📊 Haftalık XP Sıralaması:\n`;
-  liste.forEach((u, i) => { msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
+  liste.forEach((u, i) => { msg += `${m[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
   await sendMessage(msg.trim());
 }
 
 async function handleGorevBilgi() {
-  if (gorevListesi.length === 0) {
-    await sendMessage("📋 GÖREV LİSTESİ\nHenüz 500 altın bağışlayan yok.");
-    return;
-  }
+  if (gorevListesi.length === 0) { await sendMessage("📋 GÖREV LİSTESİ\nHenüz 500 altın bağışlayan yok."); return; }
   let msg = `📋 GÖREV LİSTESİ (500 altın bağışlayanlar):\n`;
   gorevListesi.forEach((nick, i) => { msg += `${i + 1}. ${nick}\n`; });
   await sendMessage(msg.trim());
 }
 
+async function handleGorevEkle(yazanUsername, hedef) {
+  if (yazanUsername !== LIDER_USERNAME) { await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`); return; }
+  if (!hedef) { await sendMessage(`❌ Kullanım: GÖREV EKLE @kullaniciadi`); return; }
+  if (gorevListesi.includes(hedef)) { await sendMessage(`⚠️ ${hedef} zaten görev listesinde!`); return; }
+  gorevListesi.push(hedef);
+  await sendMessage(`✅ ${hedef} görev listesine eklendi!`);
+}
+
+async function handleGorevKaldir(yazanUsername, hedef) {
+  if (yazanUsername !== LIDER_USERNAME) { await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`); return; }
+  if (!hedef) { await sendMessage(`❌ Kullanım: GÖREV KALDIR @kullaniciadi`); return; }
+  const idx = gorevListesi.findIndex(n => n.toLowerCase() === hedef.toLowerCase());
+  if (idx === -1) { await sendMessage(`❌ ${hedef} listede bulunamadı.`); return; }
+  gorevListesi.splice(idx, 1);
+  await sendMessage(`✅ ${hedef} görev listesinden kaldırıldı!`);
+}
+
 async function handleGorevYenile(yazanUsername) {
-  if (yazanUsername !== LIDER_USERNAME) {
-    await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`);
-    return;
-  }
+  if (yazanUsername !== LIDER_USERNAME) { await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`); return; }
   gorevListesi = [];
   await sendMessage(`✅ Görev listesi sıfırlandı!`);
 }
 
-async function handleGorevEkle(yazanUsername, hedefUsername) {
-  if (yazanUsername !== LIDER_USERNAME) {
-    await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`);
-    return;
-  }
-  if (!hedefUsername) {
-    await sendMessage(`❌ Kullanım: GÖREV EKLE @kullaniciadi`);
-    return;
-  }
-  if (gorevListesi.includes(hedefUsername)) {
-    await sendMessage(`⚠️ ${hedefUsername} zaten görev listesinde!`);
-    return;
-  }
-  gorevListesi.push(hedefUsername);
-  await sendMessage(`✅ ${hedefUsername} görev listesine eklendi!`);
-}
-
-async function handleGorevKaldir(yazanUsername, hedefUsername) {
-  if (yazanUsername !== LIDER_USERNAME) {
-    await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`);
-    return;
-  }
-  if (!hedefUsername) {
-    await sendMessage(`❌ Kullanım: GÖREV KALDIR @kullaniciadi`);
-    return;
-  }
-  const index = gorevListesi.findIndex(n => n.toLowerCase() === hedefUsername.toLowerCase());
-  if (index === -1) {
-    await sendMessage(`❌ ${hedefUsername} görev listesinde bulunamadı.`);
-    return;
-  }
-  gorevListesi.splice(index, 1);
-  await sendMessage(`✅ ${hedefUsername} görev listesinden kaldırıldı!`);
-}
-
-async function yeniUyeKarsilama(playerId) {
-  try {
-    const player = await getPlayerInfo(playerId);
-    const isim = player?.username || "yeni üye";
-    await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için siteye bakabilirsiniz.`);
-  } catch {}
-}
-
-async function bagisKontrol() {
-  try {
-    const log = await getClanLog();
-    if (!Array.isArray(log)) return;
-    for (const kayit of log) {
-      const zaman = kayit.date || kayit.timestamp;
-      if (!zaman) continue;
-      // İlk çalışmada son 24 saati kontrol et
-      const sinir = sonBagisZamani ? new Date(sonBagisZamani) : new Date(Date.now() - 24*60*60*1000);
-      if (new Date(zaman) <= sinir) continue;
-      const miktar = kayit.gold || kayit.amount || 0;
-      if (miktar === 500) {
-        const username = kayit.username || kayit.playerUsername || "Bilinmeyen";
-        if (!gorevListesi.includes(username)) {
-          gorevListesi.push(username);
-          await sendMessage(`💰 ${username} göreve 500 altın bağışladı! Görev listesine eklendi ✅`);
-        }
-        sonBagisZamani = zaman;
-      }
-    }
-  } catch (e) {
-    console.error("Bağış kontrol hatası:", e.message);
-  }
+async function yeniUyeKarsilama(playerId, username) {
+  const isim = username || "yeni üye";
+  await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için siteye bakabilirsiniz.`);
 }
 
 async function haftalikKontrol() {
@@ -271,12 +243,11 @@ async function haftalikKontrol() {
     const top3 = Object.values(haftalikXp)
       .filter(u => u.haftaNo === haftaNo)
       .map(u => ({ username: u.username, xp: u.xpNow - u.xpStart }))
-      .sort((a, b) => b.xp - a.xp)
-      .slice(0, 3);
+      .sort((a, b) => b.xp - a.xp).slice(0, 3);
     if (top3.length === 0) return;
-    const madalyalar = ["1.", "2.", "3."];
+    const m = ["🥇","🥈","🥉"];
     let msg = `🏆 Haftanın En İyi 3 Kasıcısı:\n`;
-    top3.forEach((u, i) => { msg += `${madalyalar[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
+    top3.forEach((u, i) => { msg += `${m[i]} ${u.username} XP-${u.xp.toLocaleString()}\n`; });
     await sendMessage(msg.trim());
   }
 }
@@ -293,16 +264,21 @@ async function checkMessages() {
       const text = (mesaj.msg || "").trim();
       const playerId = mesaj.playerId;
 
-      if (!playerId) continue;
-      if (botPlayerId && playerId === botPlayerId) continue;
-
-      if (mesaj.isSystem && text.toLowerCase().includes("joined")) {
-        await yeniUyeKarsilama(playerId);
+      // Sistem mesajı kontrolü - her sistem mesajını logla
+      if (mesaj.isSystem || mesaj.type === "SYSTEM" || !playerId) {
+        console.log("[SİSTEM]", JSON.stringify(mesaj).slice(0, 200));
+        // Katılma mesajı mı?
+        const textLower = text.toLowerCase();
+        if (textLower.includes("joined") || textLower.includes("katıldı") || textLower.includes("katildi")) {
+          const username = mesaj.username || mesaj.playerUsername || null;
+          await yeniUyeKarsilama(playerId, username);
+        }
         continue;
       }
 
-      const upper = text.toUpperCase();
+      if (botPlayerId && playerId === botPlayerId) continue;
 
+      const upper = text.toUpperCase();
       if (upper === "BOT YARDIM") {
         await handleBotYardim();
       } else if (upper === "XP KONTROL") {
@@ -316,32 +292,26 @@ async function checkMessages() {
         await handleGorevYenile(p?.username || null);
       } else if (upper.startsWith("GÖREV EKLE") || upper.startsWith("GOREV EKLE")) {
         const p = await getPlayerInfo(playerId);
-        const yazanUsername = p?.username || null;
-        const parcalar = text.split("@");
-        const hedef = parcalar[1] ? parcalar[1].trim() : null;
-        await handleGorevEkle(yazanUsername, hedef);
+        const hedef = text.split("@")[1]?.trim() || null;
+        await handleGorevEkle(p?.username || null, hedef);
       } else if (upper.startsWith("GÖREV KALDIR") || upper.startsWith("GOREV KALDIR")) {
         const p = await getPlayerInfo(playerId);
-        const yazanUsername = p?.username || null;
-        // "@kullaniciadi" kısmını al
-        const parcalar = text.split("@");
-        const hedef = parcalar[1] ? parcalar[1].trim() : null;
-        await handleGorevKaldir(yazanUsername, hedef);
+        const hedef = text.split("@")[1]?.trim() || null;
+        await handleGorevKaldir(p?.username || null, hedef);
       }
     }
-  } catch (err) {
-    console.error("Mesaj hatası:", err.message);
-  }
+  } catch (err) { console.error("Mesaj hatası:", err.message); }
 }
 
 console.log(`🐺 BOT(TheiaRyu) başlatıldı!`);
 botIdOgren();
 xpGuncelle();
+bagisKontrol();
 setInterval(xpGuncelle, 3 * 60 * 1000);
+setInterval(bagisKontrol, 60 * 1000); // Her dakika bağış kontrol
 setInterval(async () => {
   await checkMessages();
   await haftalikKontrol();
-  await bagisKontrol();
 }, 10000);
 checkMessages();
                          
