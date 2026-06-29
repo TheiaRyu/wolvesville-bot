@@ -116,6 +116,7 @@ async function handleBotYardim() {
     `HAFTALIK XP KONTROL → Bu hafta top 5\n` +
     `GÖREV BİLGİ → 500 altın bağışlayanlar\n` +
     `GÖREV BİLGİ YENİLE → Tüm listeyi sıfırla (lider)\n` +
+    `GÖREV EKLE @isim → Listeye ekle (lider)\n` +
     `GÖREV KALDIR @isim → Listeden çıkar (lider)\n` +
     `BOT YARDIM → Bu liste`
   );
@@ -174,6 +175,23 @@ async function handleGorevYenile(yazanUsername) {
   await sendMessage(`✅ Görev listesi sıfırlandı!`);
 }
 
+async function handleGorevEkle(yazanUsername, hedefUsername) {
+  if (yazanUsername !== LIDER_USERNAME) {
+    await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`);
+    return;
+  }
+  if (!hedefUsername) {
+    await sendMessage(`❌ Kullanım: GÖREV EKLE @kullaniciadi`);
+    return;
+  }
+  if (gorevListesi.includes(hedefUsername)) {
+    await sendMessage(`⚠️ ${hedefUsername} zaten görev listesinde!`);
+    return;
+  }
+  gorevListesi.push(hedefUsername);
+  await sendMessage(`✅ ${hedefUsername} görev listesine eklendi!`);
+}
+
 async function handleGorevKaldir(yazanUsername, hedefUsername) {
   if (yazanUsername !== LIDER_USERNAME) {
     await sendMessage(`❌ Bu komutu sadece ${LIDER_USERNAME} kullanabilir.`);
@@ -196,7 +214,7 @@ async function yeniUyeKarsilama(playerId) {
   try {
     const player = await getPlayerInfo(playerId);
     const isim = player?.username || "yeni üye";
-    await sendMessage(`👋 Hoş geldin ${isim}! 🐺\nKomutlar için: BOT YARDIM`);
+    await sendMessage(`👋 ${isim} KARA İNCİ'ye HOŞ GELDİNİZ! 🐺\nDetaylar için siteye bakabilirsiniz.`);
   } catch {}
 }
 
@@ -207,7 +225,9 @@ async function bagisKontrol() {
     for (const kayit of log) {
       const zaman = kayit.date || kayit.timestamp;
       if (!zaman) continue;
-      if (sonBagisZamani && new Date(zaman) <= new Date(sonBagisZamani)) continue;
+      // İlk çalışmada son 24 saati kontrol et
+      const sinir = sonBagisZamani ? new Date(sonBagisZamani) : new Date(Date.now() - 24*60*60*1000);
+      if (new Date(zaman) <= sinir) continue;
       const miktar = kayit.gold || kayit.amount || 0;
       if (miktar === 500) {
         const username = kayit.username || kayit.playerUsername || "Bilinmeyen";
@@ -294,6 +314,12 @@ async function checkMessages() {
       } else if (upper === "GÖREV BİLGİ YENİLE" || upper === "GOREV BILGI YENILE") {
         const p = await getPlayerInfo(playerId);
         await handleGorevYenile(p?.username || null);
+      } else if (upper.startsWith("GÖREV EKLE") || upper.startsWith("GOREV EKLE")) {
+        const p = await getPlayerInfo(playerId);
+        const yazanUsername = p?.username || null;
+        const parcalar = text.split("@");
+        const hedef = parcalar[1] ? parcalar[1].trim() : null;
+        await handleGorevEkle(yazanUsername, hedef);
       } else if (upper.startsWith("GÖREV KALDIR") || upper.startsWith("GOREV KALDIR")) {
         const p = await getPlayerInfo(playerId);
         const yazanUsername = p?.username || null;
@@ -318,4 +344,4 @@ setInterval(async () => {
   await bagisKontrol();
 }, 10000);
 checkMessages();
-  
+                         
